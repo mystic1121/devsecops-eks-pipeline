@@ -1,0 +1,37 @@
+# Local .terraform directories
+**/.terraform/
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files as they likely contain sensitive data
+*.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually specific to a developer's setup
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Exclude example .tfvars from ignore rule
+!*.tfvars.example
+!example.tfvars
+
+# CLI configuration files
+.terraform.rc
+terraform.rc
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+local-files/
