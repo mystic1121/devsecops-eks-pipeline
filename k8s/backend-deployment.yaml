@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: turbo-backend
+  namespace: turbo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: turbo-backend
+  template:
+    metadata:
+      labels:
+        app: turbo-backend
+    spec:
+      containers:
+      - name: backend
+        image: 335651423113.dkr.ecr.ap-south-1.amazonaws.com/turbo-task-backend:latest
+        ports:
+        - containerPort: 4000
+        envFrom:
+        - secretRef:
+            name: mongo-secret
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "250m"

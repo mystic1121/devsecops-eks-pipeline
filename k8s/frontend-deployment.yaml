@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: turbo-frontend
+  namespace: turbo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: turbo-frontend
+  template:
+    metadata:
+      labels:
+        app: turbo-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: 335651423113.dkr.ecr.ap-south-1.amazonaws.com/turbo-task-frontend:latest
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
