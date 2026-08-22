@@ -1,0 +1,125 @@
+## Reference copy only — the live Jenkinsfile lives in turbo-task-app ##
+
+pipeline {
+    agent any
+
+    tools {
+        jdk 'jdk17'
+        nodejs 'node18'
+    }
+
+    environment {
+        AWS_REGION         = 'ap-south-1' // Mumbai Region
+        AWS_ACCOUNT_ID     = '335651423113' // Replace with your 12-digit AWS Account ID
+        ECR_FRONTEND_REPO  = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/turbo-task-frontend"
+        ECR_BACKEND_REPO   = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/turbo-task-backend"
+        GITOPS_REPO_URL    = "https://github.com/mystic1121/devsecops-eks-pipeline.git"
+        SCANNER_HOME       = tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('SonarQube Code Analysis') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    sh '''
+                    $SCANNER_HOME/bin/sonar-scanner \
+                    -Dsonar.projectName=TurboTask \
+                    -Dsonar.projectKey=TurboTask \
+                    -Dsonar.sources=. \
+                    -Dsonar.exclusions=**/node_modules/**,**/dist/**
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Quality Gate') {
+            steps {
+                script {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline aborted due to SonarQube Quality Gate failure: ${qg.status}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Trivy FS Scan') {
+            steps {
+                // Modern Trivy flag syntax (--scanners vuln,misconfig)
+                sh 'trivy fs --scanners vuln,misconfig . > trivyfs.txt'
+            }
+        }
+
+        stage('Docker Build Images') {
+            steps {
+                script {
+                    sh "docker build -t ${ECR_BACKEND_REPO}:${BUILD_NUMBER} ./backend"
+                    sh "docker build --build-arg VITE_API_URL=/api -t ${ECR_FRONTEND_REPO}:${BUILD_NUMBER} ./frontend"
+                }
+            }
+        }
+
+        stage('Trivy Image Vulnerability Gate') {
+            steps {
+                script {
+                    // Fail build if CRITICAL vulnerabilities exist in images
+                    sh "trivy image --exit-code 1 --severity CRITICAL ${ECR_BACKEND_REPO}:${BUILD_NUMBER}"
+                    sh "trivy image --exit-code 1 --severity CRITICAL ${ECR_FRONTEND_REPO}:${BUILD_NUMBER}"
+                }
+            }
+        }
+
+        stage('Push Images to Amazon ECR') {
+            steps {
+                script {
+                    // Uses IAM Instance Profile (Zero static credentials!)
+                    sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+                    sh "docker push ${ECR_BACKEND_REPO}:${BUILD_NUMBER}"
+                    sh "docker push ${ECR_FRONTEND_REPO}:${BUILD_NUMBER}"
+                }
+            }
+        }
+
+        stage('Update GitOps Repository (Git as Source of Truth)') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh """
+                    git config --global user.email "jenkins@devsecops.com"
+                    git config --global user.name "Jenkins CI"
+                    
+                    rm -rf turbo-task-gitops
+                    git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/mystic1121/devsecops-eks-pipeline.git
+                    cd turbo-task-gitops/k8s
+                    
+                    sed -i 's|image: .*turbo-task-backend:.*|image: ${ECR_BACKEND_REPO}:${BUILD_NUMBER}|g' backend-deployment.yaml
+                    sed -i 's|image: .*turbo-task-frontend:.*|image: ${ECR_FRONTEND_REPO}:${BUILD_NUMBER}|g' frontend-deployment.yaml
+                    
+                    git add .
+                    git commit -m "Update image tags to build #${BUILD_NUMBER}"
+                    git push origin main
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
