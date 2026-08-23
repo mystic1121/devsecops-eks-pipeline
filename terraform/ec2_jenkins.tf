@@ -36,7 +36,7 @@ resource "aws_security_group" "jenkins_sg" {
 }
 
 resource "aws_instance" "jenkins" {
-  ami                  = "ami-03f842a542735b465" # Ubuntu 22.04 LTS (ap-south-1)
+  ami                  = data.aws_ami.ubuntu.id
   key_name = "devsecops-key"
   instance_type        = "t3.large"
   subnet_id            = module.vpc.public_subnets[0]
