@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: 335651423113.dkr.ecr.ap-south-1.amazonaws.com/turbo-task-backend:7
+        image: 335651423113.dkr.ecr.ap-south-1.amazonaws.com/turbo-task-backend:8
         ports:
         - containerPort: 4000
         envFrom:
